@@ -23,6 +23,8 @@ data GroupOpts = GroupOpts
   , _groups      :: Maybe [Group]
   , _roleFile    :: FilePath
   , _roles       :: Maybe [Role]
+  , _numGroups   :: Maybe Int
+  , _groupSize   :: Maybe Int
   }
   deriving Show
 
@@ -61,6 +63,16 @@ groupOpts = GroupOpts
       (  long "roles" <> short 'r'
       <> metavar "LIST"
       <> help "Comma-separated list of roles")
+  <*> (optional . fmap read . strOption)
+      (  long "numgroups" <> short 'n'
+      <> metavar "INT"
+      <> help "Number of groups to generate"
+      )
+  <*> (optional . fmap read . strOption)
+      (  long "groupsize" <> short 'z'
+      <> metavar "INT"
+      <> help "Size of each group"
+      )
 
 groupInfo :: ParserInfo GroupOpts
 groupInfo = info (groupOpts <**> helper)
@@ -77,7 +89,7 @@ mkGroups opts = do
   studentList <- getStudents opts
   groupList   <- getGroups opts
   roleList    <- getRoles opts
-  assign      <- assignGroups studentList groupList roleList
+  assign      <- assignGroups opts studentList groupList roleList
   printAssignment assign
 
 getStudents :: GroupOpts -> IO [Student]
@@ -96,12 +108,17 @@ listOrFile :: Maybe [String] -> FilePath -> IO [String]
 listOrFile (Just xs) _ = return xs
 listOrFile Nothing f   = lines <$> readFile f
 
-assignGroups :: [Student] -> [Group] -> [Role] -> IO Assignment
-assignGroups ss groupNames rs = do
+assignGroups :: GroupOpts -> [Student] -> [Group] -> [Role] -> IO Assignment
+assignGroups opts ss groupNames rs = do
   ss' <- shuffleM ss
-  let gs   = transpose . chunksOf (length groupNames) $ ss'
+  let gs   = transpose . chunksOf n $ ss'
       gsrs = map (zip (map Just rs ++ repeat Nothing)) gs
   return $ M.fromList (zip groupNames gsrs)
+  where
+    n = case (opts ^. numGroups, opts ^. groupSize) of
+      (Just ng, _) -> ng
+      (_, Just gs) -> length ss `div` gs
+      _            -> length groupNames
 
 printAssignment :: Assignment -> IO ()
 printAssignment = putStr . formatAssignment
